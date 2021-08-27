@@ -203,7 +203,7 @@ strip_all() {
 	for __f in $("${FIND}" "${wd}"); do
 		case $("${FILE}" -bi "${__f}") in
 		"application/x-sharedlib;"*|"application/x-executable;"*)
-			"${STRIP}" -s "${__f}" -R .comment 2>/dev/null || ::
+			"${STRIP}" -s "${__f}" -R .comment 2>/dev/null || :
 			;;
 		*)
 			;;
