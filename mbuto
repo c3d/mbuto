@@ -97,6 +97,26 @@ profile_shell() {
 	       bash"
 }
 
+# Profile for passt (https://passt.top) tests
+profile_passt() {
+	PROGS="ash,dash,bash ip mount ls insmod mkdir ln cat chmod lsmod
+	       modprobe find grep mknod mv rm umount udhcpc jq iperf3
+	       dhclient busybox logger"
+	LINKS="
+		 ash,dash,bash		/init
+		 ash,dash,bash		/bin/sh
+		 ash,dash,bash		/usr/bin/bash
+	"
+	NODES="${NODES}
+	       tty
+	       ttyS0"
+	DIRS="${DIRS}
+	      /tmp"
+	COPIES="/etc/udhcpc/default.script"
+	FIXUP="${FIXUP}
+	       sh +m"
+}
+
 # Profile to install pbench-server from Fedora packages, spawn shell before init
 profile_pbench() {
 	PROGS="${PROGS} bash env grep sed p11-kit cat mkdir chown chmod
