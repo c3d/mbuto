@@ -101,7 +101,9 @@ profile_shell() {
 profile_passt() {
 	PROGS="ash,dash,bash ip mount ls insmod mkdir ln cat chmod lsmod
 	       modprobe find grep mknod mv rm umount udhcpc jq iperf3
-	       dhclient busybox logger"
+	       dhclient busybox logger sed tr chown sipcalc cut md5sum
+	       nc dd strace ping tail killall sleep sysctl nproc
+	       tcp_rr tcp_crr udp_rr which tee"
 	LINKS="
 		 ash,dash,bash		/init
 		 ash,dash,bash		/bin/sh
@@ -112,9 +114,11 @@ profile_passt() {
 	       ttyS0"
 	DIRS="${DIRS}
 	      /tmp"
-	COPIES="/etc/udhcpc/default.script"
+	COPIES="/etc/udhcpc/default.script
+		/sbin/dhclient-script"
 	FIXUP="${FIXUP}
-	       sh +m"
+		:> /etc/fstab
+		sh +m"
 }
 
 # Profile to install pbench-server from Fedora packages, spawn shell before init
