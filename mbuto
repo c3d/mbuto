@@ -103,7 +103,7 @@ profile_passt() {
 	       modprobe find grep mknod mv rm umount udhcpc jq iperf3
 	       dhclient busybox logger sed tr chown sipcalc cut md5sum
 	       nc dd strace ping tail killall sleep sysctl nproc
-	       tcp_rr tcp_crr udp_rr which tee"
+	       tcp_rr tcp_crr udp_rr which tee seq bc"
 	LINKS="
 		 ash,dash,bash		/init
 		 ash,dash,bash		/bin/sh
