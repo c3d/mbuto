@@ -564,7 +564,7 @@ kmod_post() {
 	"${CP}" -a "${MODDIR}/lib/modules/${KERNEL}/modules.order" \
 		   "${MODDIR}/lib/modules/${KERNEL}/modules.builtin" \
 		   "${wd}/lib/modules/${KERNEL}"
-	"${DEPMOD}" -b "${wd}"
+	"${DEPMOD}" -b "${wd}" "${KERNEL}"
 }
 
 ################################################################################
