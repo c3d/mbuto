@@ -58,25 +58,25 @@ FIXUP='#!/bin/sh
 
 export PATH=${PATH}:/bin:/usr/bin:/sbin:/usr/sbin
 
-mount -t proc - /proc
-mount -t sysfs - /sys
+mount -t proc proc /proc
+mount -t sysfs sys /sys
 
 for m in '${KMODS}'; do
 	modprobe ${m}
 done
-mount -t devtmpfs - /dev
+mount -t devtmpfs dev /dev
 
 mkdir /dev/pts
-mount -t devpts - /dev/pts
+mount -t devpts pts /dev/pts
 
 mkdir -p /sys/fs/cgroup
-mount -t tmpfs - /sys/fs/cgroup
+mount -t tmpfs cgroup /sys/fs/cgroup
 mkdir /sys/fs/cgroup/unified
-mount -o rw,nsdelegate -t cgroup2 - /sys/fs/cgroup/unified
+mount -o rw,nsdelegate -t cgroup2 cgroup /sys/fs/cgroup/unified
 
 for t in cpu,cpuacct blkio memory perf_event pids cpuset freezer devices; do
 	mkdir /sys/fs/cgroup/${t}
-	mount -o rw,${t} -t cgroup - /sys/fs/cgroup/${t}
+	mount -o rw,${t} -t cgroup cgroup /sys/fs/cgroup/${t}
 done
 
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=968199
