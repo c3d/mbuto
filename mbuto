@@ -27,6 +27,12 @@
 PROGS="${PROGS:-kata-agent ash,dash,bash ip mount ls modprobe insmod mkdir
 	 nsenter ln}"
 
+# Libraries commonly loaded via dlopen(3) (strictly needed for basic tasks)
+LIBS_DLOPEN="${LIBS_DLOPEN:-
+	libc.so.6		libnss_dns.so.2
+	libc.so.6		libnss_files.so.2
+}"
+
 # Links: installed target program, then link name, one per line
 LINKS="${LINKS:-
 	kata-agent		/init
@@ -397,6 +403,21 @@ libs_copy_ld_so() {
 	"${CP}" --parents --preserve=all "${1}" "${wd}"
 }
 
+# libs_dlopen_copy() - Recursively copy matching libraries from LIBS_DLOPEN
+# $1:	Library (base path) that loads further libraries using dlopen(3)
+libs_dlopen_copy() {
+	__match=
+	for __t in ${LIBS_DLOPEN}; do
+		[ -z "${__match}" ] && __match="${__t}" && continue
+		if [ "${__match}" = "$(basename ${1})" ]; then
+			__path="$(dirname "${1}")/${__t}"
+			"${CP}" --parents --preserve=all "${__path}" "${wd}"
+			libs_copy "${__path}"
+			__match=
+		fi
+	done
+}
+
 # libs_copy() - Recursively copy shared dependencies for programs and libraries
 # $1:	Host path to program or library
 libs_copy() {
@@ -426,6 +447,8 @@ libs_copy() {
 		# Recurse over all shared object dependencies
 		libs_copy "${__path}"
 	done
+
+	libs_dlopen_copy "${1}"
 
 	# Dynamic linker is listed as single path, make sure we copy it once
 	__ld_so=
@@ -820,6 +843,11 @@ usage() {
 	echo "Environmental variables can be used to replace:"
 	echo "	PROGS"
 	echo "		base programs"
+	echo "	LIBS_DLOPEN"
+	echo "		additional libraries, not directly linked from"
+	echo "		programs, typically loaded via dlopen(3) by matching"
+	echo "		libraries, in the form"
+	echo "			MATCHING_LIBRARY ADDITIONAL_LIBRARY"
 	echo "	KMODS"
 	echo "		base kernel modules"
 	echo "	NODES"
