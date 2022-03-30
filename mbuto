@@ -4,12 +4,12 @@
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
+# Copyright (c) 2020-2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 #
 # This script builds Linux initramfs images suitable for lightweight VM
-# environments (Kata Containers in particular), without relying on
-# distribution-specific tools (dracut, debootstrap, mkinitramfs, etc.) or
-# containerised environments.
+# environments, without relying on distribution-specific tools (dracut,
+# debootstrap, mkinitramfs, etc.) or containerised environments.
 #
 # Programs are sourced from the host, together with required dynamic libraries.
 # Kernel modules, links, and initial device nodes are configured manually. A
@@ -23,9 +23,7 @@
 
 ### Configuration ##############################################################
 
-# Programs sourced together with linked libraries, alternatives with commas
-PROGS="${PROGS:-kata-agent ash,dash,bash ip mount ls modprobe insmod mkdir
-	 nsenter ln}"
+# Programs: see profile_base() below for an example.
 
 # Libraries commonly loaded via dlopen(3) (strictly needed for basic tasks)
 LIBS_DLOPEN="${LIBS_DLOPEN:-
@@ -33,14 +31,9 @@ LIBS_DLOPEN="${LIBS_DLOPEN:-
 	libc.so.6		libnss_files.so.2
 }"
 
-# Links: installed target program, then link name, one per line
-LINKS="${LINKS:-
-	kata-agent		/init
-	ash,dash,bash		/bin/sh
-}"
+# Links: see profile_base().
 
-# List of kernel modules
-KMODS="${KMODS:-vmw_vsock_virtio_transport virtio_net virtiofs vfio virtio_pci}"
+# Kernel modules: see profile_base().
 
 # Device nodes, one per line, NAME TYPE MAJOR MINOR supported, copied otherwise
 NODES="${NODES:-
@@ -60,30 +53,20 @@ DIRS="${DIRS:-/proc /sys}"
 COPIES="${COPIES:-}"
 
 # Fix-up script to run before /init, can be omitted
-FIXUP='#!/bin/sh
+[ -z "${FIXUP}" ] && FIXUP='#!/bin/sh
 
-export PATH=${PATH}:/bin:/usr/bin:/sbin:/usr/sbin
+export PATH=/bin:/usr/bin:/sbin:/usr/sbin
 
 mount -t proc proc /proc
 mount -t sysfs sys /sys
 
-for m in '${KMODS}'; do
+for m in __KMODS__; do
 	modprobe ${m}
 done
 mount -t devtmpfs dev /dev
 
 mkdir /dev/pts
 mount -t devpts pts /dev/pts
-
-mkdir -p /sys/fs/cgroup
-mount -t tmpfs cgroup /sys/fs/cgroup
-mkdir /sys/fs/cgroup/unified
-mount -o rw,nsdelegate -t cgroup2 cgroup /sys/fs/cgroup/unified
-
-for t in cpu,cpuacct blkio memory perf_event pids cpuset freezer devices; do
-	mkdir /sys/fs/cgroup/${t}
-	mount -o rw,${t} -t cgroup cgroup /sys/fs/cgroup/${t}
-done
 
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=968199
 ln -sf /proc/self/fd /dev/fd
@@ -92,75 +75,127 @@ ln -sf /dev/fd/1 /dev/stdout
 ln -sf /dev/fd/2 /dev/stderr
 '
 
-# Profile spawning interactive shell before init, for debugging purposes
-profile_shell() {
-	PROGS="${PROGS} bash cat chmod lsmod modprobe find grep mknod mv rm
-	       umount"
+# Start a shell, nothing else
+profile_base() {
+	# Programs sourced with linked libraries, alternatives with commas
+	PROGS="${PROGS:-ash,dash,bash mount mkdir ln}"
+
+	# Links: installed target program, then link name, one per line
+	LINKS="${LINKS:-
+		ash,dash,bash		/bin/sh
+		ash,dash,bash		/init}"
+
+	# List of kernel modules
+	KMODS="${KMODS:-}"
+
+	FIXUP="${FIXUP}
+		sh +m
+"
+
+	# Output (stdout) template keywords: __INITRD__ and __KERNEL__
+	OUTPUT="__INITRD__
+"
+}
+
+# Profile spawning bash, for general usage
+profile_bash() {
+	PROGS="${PROGS:-bash cat chmod lsmod modprobe find grep mkdir mknod mv
+	       ls ip ln rm mount umount ps strace}"
+
+	LINKS="${LINKS:-
+		bash			/bin/sh
+		bash			/init}"
+
+	KMODS="${KMODS:-virtio_net virtio_pci}"
+
 	NODES="${NODES}
 	       tty
 	       ttyS0"
+
+	OUTPUT="__INITRD__
+"
+}
+
+# Base profile for Kata Containers (https://katacontainers.io/)
+profile_kata() {
+	PROGS="${PROGS:-kata-agent ash,dash,bash mount modprobe mkdir ln}"
+
+	KMODS="${KMODS:-vmw_vsock_virtio_transport virtio_net virtiofs vfio
+	       virtio_pci}"
+	LINKS="${LINKS:-
+		ash,dash,bash		/bin/sh
+		kata-agent		/init}"
+
+	FIXUP="${FIXUP}"'
+		mkdir -p /sys/fs/cgroup
+		mount -t tmpfs cgroup /sys/fs/cgroup
+		mkdir /sys/fs/cgroup/unified
+		mount -o rw,nsdelegate -t cgroup2 cgroup /sys/fs/cgroup/unified
+
+		for t in cpu,cpuacct blkio memory perf_event pids cpuset \
+			 freezer devices; do
+			mkdir /sys/fs/cgroup/${t}
+			mount -o rw,${t} -t cgroup cgroup /sys/fs/cgroup/${t}
+		done
+		'
+
+	OUTPUT="Kata Containers [hypervisor.qemu] configuration:
+
+	kernel = \"__KERNEL__\"
+	initrd = \"__INITRD__\"
+"
+}
+
+# Debugging profile for Kata Containers: start shell before kata-agent
+profile_kata_debug() {
+	PROFILE_LIST="${PROFILE_LIST} kata_debug"
+
+	profile_kata
+
+	PROGS="${PROGS} ash,dash,bash cat ip ls strace insmod nsenter"
+
+	LINKS="${LINKS}
+		ash,dash,bash		/bin/sh"
+
 	FIXUP="${FIXUP}
-	       bash"
+	       echo Starting interactive shell, exit to spawn kata-agent
+	       sh +m
+	       "
 }
 
 # Profile for passt (https://passt.top) tests
 profile_passt() {
-	PROGS="ash,dash,bash ip mount ls insmod mkdir ln cat chmod lsmod
-	       modprobe find grep mknod mv rm umount udhcpc jq iperf3
+	PROGS="${PROGS}:-ash,dash,bash ip mount ls insmod mkdir ln cat chmod
+	       lsmod modprobe find grep mknod mv rm umount udhcpc jq iperf3
 	       dhclient busybox logger sed tr chown sipcalc cut md5sum
 	       nc dd strace ping tail killall sleep sysctl nproc
 	       tcp_rr tcp_crr udp_rr which tee seq bc"
-	LINKS="
+
+	KMODS="${KMODS:- virtio_net virtio_pci}"
+
+	LINKS="${LINKS:-
 		 ash,dash,bash		/init
 		 ash,dash,bash		/bin/sh
-		 ash,dash,bash		/usr/bin/bash
-	"
+		 ash,dash,bash		/usr/bin/bash}"
+
 	NODES="${NODES}
 	       tty
 	       ttyS0"
+
 	DIRS="${DIRS}
 	      /tmp"
-	COPIES="/etc/udhcpc/default.script
+
+	COPIES="${COPIES}
+		/etc/udhcpc/default.script
 		/sbin/dhclient-script"
-	FIXUP="${FIXUP}
-		:> /etc/fstab
-		sh +m"
-}
 
-# Profile to install pbench-server from Fedora packages, spawn shell before init
-profile_pbench() {
-	PROGS="${PROGS} bash env grep sed p11-kit cat mkdir chown chmod
-	       basename hostname vim"
-	LINKS="
-		 bash		/init
-		 bash		/bin/sh
-		 bash		/usr/bin/bash
-	"
-
-	__f32="https://download.fedoraproject.org/pub/fedora/linux/releases/32"
-	__f32pkg="${__f32}/Everything/x86_64/os/Packages"
-	__copr="https://copr-be.cloud.fedoraproject.org"
-	__ndokos="${__copr}/results/ndokos/pbench/fedora-32-x86_64"
-	PKGS="
-		${__ndokos}/01496531-fio/fio-3.19-1.x86_64.rpm
-		${__f32pkg}/p/python3-libs-3.8.2-2.fc32.i686.rpm
-		${__f32pkg}/p/python3-3.8.2-2.fc32.x86_64.rpm
-		${__f32pkg}/t/tzdata-2019c-3.fc32.noarch.rpm
-		${__f32pkg}/c/ca-certificates-2020.2.40-3.fc32.noarch.rpm
-		${__f32pkg}/p/python3-pysocks-1.7.1-4.fc32.noarch.rpm
-		${__f32pkg}/p/python3-idna-2.8-6.fc32.noarch.rpm
-		${__f32pkg}/p/python3-urllib3-1.25.7-3.fc32.noarch.rpm
-		${__f32pkg}/p/python3-six-1.14.0-2.fc32.noarch.rpm
-		${__f32pkg}/p/python3-dateutil-2.8.0-8.fc32.noarch.rpm
-		${__f32pkg}/p/python3-s3transfer-0.3.3-1.fc32.noarch.rpm
-		${__f32pkg}/p/python3-docutils-0.15.2-4.fc32.noarch.rpm
-		${__f32pkg}/p/python3-jmespath-0.9.4-4.fc32.noarch.rpm
-		${__f32pkg}/p/python3-botocore-1.14.17-2.fc32.noarch.rpm
-		${__f32pkg}/p/python3-boto3-1.11.17-1.fc32.noarch.rpm
-		${__ndokos}/01506210-pbench-server/pbench-server-0.69.2-2g5c0ea483.noarch.rpm
-	"
 	FIXUP="${FIXUP}
-	       sh"
+		set +m
+		:> /etc/fstab"
+
+	OUTPUT="KERNEL=__KERNEL__
+INITRD=__INITRD__
+"
 }
 
 ################################################################################
@@ -252,9 +287,11 @@ fixup_apply() {
 	if [ -n "${SCRIPT}" ]; then
 		"${CP}" "${SCRIPT}"
 	else
-		echo "${FIXUP}" > "${wd}/init"
+		KMODS="$(echo ${KMODS} | tr -d '\n')"
+		printf "%s" "${FIXUP}" | \
+		sed 's,__KMODS__,'"${KMODS}"',g' > "${wd}/init"
 	fi
-	echo "/${__call}" >> "${wd}/init"
+	echo "${__call}" >> "${wd}/init"
 	"${CHMOD}" 755 "${wd}/init"
 }
 
@@ -798,11 +835,9 @@ cmds() {
 
 	stats
 
-	notice "Kata Containers [hypervisor.qemu] configuration:"
-	notice
-	notice "	kernel = \"/boot/vmlinuz-${KERNEL}\""
-	notice "	initrd = \"$("${REALPATH}" "${OUT}")\""
-	notice
+	printf "%s" "${OUTPUT}"						| \
+		sed 's,__INITRD__,'"$("${REALPATH}" "${OUT}")"',g'	| \
+		sed 's,__KERNEL__,/boot/vmlinuz-'"${KERNEL}"',g'
 
 	if [ -n "${ARCHIVEMOUNT}" ]; then
 		trap - EXIT
@@ -826,7 +861,9 @@ usage() {
 	echo "	-m PATH"
 	echo "		relative root for /lib/modules. Default: /"
 	echo "	-p PROFILE"
-	echo "		select profile for add-ons (see profile_*() in script)"
+	echo "		select profile for add-ons, one of:"
+	echo "			base bash kata kata_debug passt"
+	echo "		Default: base"
 	echo "	-s SCRIPT|-"
 	echo "		fix-up script to run before init, '-' for none"
 	echo "	-v: verbose"
@@ -868,7 +905,7 @@ usage() {
 	echo "		Build a new image including grep and needed libraries"
 	echo "	${0} -f kata.img zsh_5.6.2-3_amd64.deb"
 	echo "		Install zsh package to pre-existing kata.img"
-	echo "	${0} -v -f kata.img -p shell -c lz4"
+	echo "	${0} -v -f kata.img -p kata_debug -c lz4"
 	echo "		Use lz4 compression, run a shell before proceeding"
 	exit 1
 }
@@ -900,6 +937,8 @@ while getopts c:df:k:m:p:s:vh __opt; do
 	esac
 done
 shift $((OPTIND - 1))
+
+[ -z "${PROFILE}" ] && PROFILE="base"
 
 # Check needed tools, exit if any is missing
 for __l in ${TOOLS}; do
