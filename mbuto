@@ -336,11 +336,11 @@ cpio_init() {
 # cpio_compress() - Compress archive, test available methods if none is selected
 # $1:	Existing CPIO archive
 cpio_compress() {
-	[ "${COMPRESS}" = "none" ] && return
+	{ [ -z "${COMPRESS}" ] || [ "${COMPRESS}" = "none" ]; } && return
 
 	info "Compressing CPIO archive ${1}"
 
-	if [ -n "${COMPRESS}" ] && [ "${COMPRESS}" != "auto" ]; then
+	if [ "${COMPRESS}" != "auto" ]; then
 		[ "${COMPRESS}" = "lzo" ] && __cmd="lzop" || __cmd="${COMPRESS}"
 
 		cmd_check "${__cmd}"
@@ -854,7 +854,7 @@ usage() {
 	echo
 	echo "Options:"
 	echo "	-c gzip|lz4|lzma|lzo|auto|none"
-	echo "		compression method for CPIO file. Default: auto"
+	echo "		compression method for CPIO file. Default: none"
 	echo "	-d"
 	echo "		don't strip binary objects"
 	echo "	-f PATH"
