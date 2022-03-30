@@ -344,9 +344,12 @@ cpio_compress() {
 		[ "${COMPRESS}" = "lzo" ] && __cmd="lzop" || __cmd="${COMPRESS}"
 
 		cmd_check "${__cmd}"
-		[ "${__cmd}" = "lz4" ] && __opt="-l" || __opt="-S .lz4"
+		if [ "${__cmd}" = "lz4" ]; then
+			"${__cmd}" -l -f -q -9 "${1}" "${1}.lz4"
+		else
+			"${__cmd}" -f -q -9 -S .lz4 "${1}"
+		fi
 
-		"${__cmd}" ${__opt} -f -q -9 "${1}"
 		mv "${1}.lz4" "${1}"
 
 		return
