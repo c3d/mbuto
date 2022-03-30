@@ -916,14 +916,7 @@ usage() {
 ################################################################################
 
 
-# Entry point: if we're not running as root, re-run with fakeroot
-if [ "${LD_PRELOAD}" != "libfakeroot-sysv.so" ] && [ "$(id -u)" -ne 0 ]; then
-	if ! FAKEROOT="$(command -v fakeroot)"; then
-		err "Not root and no fakeroot available, exiting"
-	fi
-	PATH="${PATH}:/sbin:/usr/sbin" "${FAKEROOT}" "${0}" "$@"
-	exit ${?}
-fi
+ARGS=${@}
 
 # Parse options
 while getopts c:df:k:m:p:s:vh __opt; do
@@ -940,8 +933,16 @@ while getopts c:df:k:m:p:s:vh __opt; do
 	esac
 done
 shift $((OPTIND - 1))
-
 [ -z "${PROFILE}" ] && PROFILE="base"
+
+# If we're not running as root, re-run with fakeroot
+if [ "${LD_PRELOAD}" != "libfakeroot-sysv.so" ] && [ "$(id -u)" -ne 0 ]; then
+	if ! FAKEROOT="$(command -v fakeroot)"; then
+		err "Not root and no fakeroot available, exiting"
+	fi
+	PATH="${PATH}:/sbin:/usr/sbin" "${FAKEROOT}" "${0}" ${ARGS}
+	exit ${?}
+fi
 
 # Check needed tools, exit if any is missing
 for __l in ${TOOLS}; do
