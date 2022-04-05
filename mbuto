@@ -44,6 +44,9 @@ DIRS="${DIRS:-/proc /sys}"
 # Copies of full paths, attributes and parents directories preserved
 COPIES="${COPIES:-}"
 
+# Workers for time-consuming tasks such as stripping modules, see workers()
+THREADS="$(nproc)"
+
 # Fix-up script to run before /init, can be omitted
 [ -z "${FIXUP}" ] && FIXUP='#!/bin/sh
 
@@ -155,11 +158,11 @@ profile_kata_debug() {
 
 # Profile for passt (https://passt.top) tests
 profile_passt() {
-	PROGS="${PROGS}:-ash,dash,bash ip mount ls insmod mkdir ln cat chmod
+	PROGS="${PROGS:-ash,dash,bash ip mount ls insmod mkdir ln cat chmod
 	       lsmod modprobe find grep mknod mv rm umount udhcpc jq iperf3
 	       dhclient busybox logger sed tr chown sipcalc cut md5sum
 	       nc dd strace ping tail killall sleep sysctl nproc
-	       tcp_rr tcp_crr udp_rr which tee seq bc"
+	       tcp_rr tcp_crr udp_rr which tee seq bc}"
 
 	KMODS="${KMODS:- virtio_net virtio_pci}"
 
@@ -177,11 +180,102 @@ profile_passt() {
 		/sbin/dhclient-script"
 
 	FIXUP="${FIXUP}
-		set +m
-		:> /etc/fstab"
+		:> /etc/fstab
+		sh +m
+"
 
 	OUTPUT="KERNEL=__KERNEL__
 INITRD=__INITRD__
+"
+}
+
+# Profile for kselftests (https://kselftest.wiki.kernel.org/)
+profile_kselftests() {
+	PROGS="${PROGS:-addr2line awk basename bash bc bridge cat chmod chown cp
+	       cpupower cut date dd diff dirname dmesg du env ethtool find gcc
+	       grep head id ifconfig insmod ip ip6tables iperf3 iptables ipvsadm
+	       jq killall ln logger ls lsmod make mausezahn md5sum mkdir mknod
+	       mktemp modprobe mount mv nc nft nproc nstat pidof ping python3
+	       realpath rm rmdir sed seq sipcalc sleep socat sort ss strace
+	       sysctl tail taskset tc tee timeout tput tr traceroute traceroute6
+	       true umount uname uniq uuidgen wc which}"
+
+	if [ ! -f "include/config/kernel.release" ]; then
+		err "This profile needs to run from a kernel tree, exiting"
+		exit 1
+	fi
+
+	KERNEL="$(cat include/config/kernel.release)"
+	MODDIR="$(${REALPATH} .mbuto_mods)"
+	${RM} -rf "${MODDIR}"
+	${MKDIR} -p "${MODDIR}"
+	INSTALL_MOD_PATH="${MODDIR}" ${MAKE} modules_install -j ${THREADS} \
+								>/dev/null
+
+	__skip_dirs="drivers/gpu drivers/iio drivers/infiniband drivers/media
+		     drivers/net/ethernet drivers/net/wireless
+		     drivers/scsi drivers/usb"
+	__skip_args=
+	for __d in ${__skip_dirs}; do
+		__skip_args="${__skip_args}-path ${__d} -prune "
+	done
+	KMODS="$(${FIND} "${MODDIR}" ${__skip_args}			\
+		-o -name '*.ko' -printf "%p ")"
+
+	workers kmod_strip_worker
+
+	KMODS="$(basename -a -s .ko ${KMODS})"
+
+	LINKS="${LINKS:-
+		 bash		/init
+		 bash		/bin/sh
+		 bash		/bin/bash
+		 bash		/usr/bin/bash}"
+
+	NODES="${NODES} tty ttyS0"
+
+	DIRS="${DIRS} /tmp /run/netns /var/run"
+
+	COPIES="${COPIES}
+		tools/testing/selftests/kselftest_install/*,"
+
+	FIXUP='#!/bin/sh
+
+		export PATH=/bin:/usr/bin:/sbin:/usr/sbin
+
+		mount -t proc proc /proc
+		mount -t sysfs sys /sys
+
+		mount -t devtmpfs dev /dev
+
+		mkdir /dev/pts
+		mount -t devpts pts /dev/pts
+
+		mkdir -p /sys/kernel/debug
+		mount -t debugfs debug /sys/kernel/debug
+
+		# https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=968199
+		ln -sf /proc/self/fd /dev/fd
+		ln -sf /dev/fd/0 /dev/stdin
+		ln -sf /dev/fd/1 /dev/stdout
+		ln -sf /dev/fd/2 /dev/stderr
+
+		set +m
+		:> /etc/fstab
+		echo 3 > /proc/sys/kernel/printk
+		echo "Press s for shell, any other key to run selftests"
+		read a
+		[ "${a}" != "s" ] && ./run_kselftest.sh
+'
+
+	for __f in $(${FIND} tools/testing/selftests/kselftest_install/ \
+		     -executable); do
+		case $("${FILE}" -bi "${__f}") in
+		"application/"*) libs_copy "${__f}" ;;
+		esac
+	done
+
+	OUTPUT="__INITRD__
 "
 }
 
@@ -192,8 +286,8 @@ INITRD=__INITRD__
 
 # List of tools used here, assigned to uppercase variable names
 TOOLS="basename bc cat cd chmod cp cpio depmod diff dirname du file find grep
-       gzip ldconfig ldd ln ls mkdir mknod mktemp modprobe mv printf readlink
-       realpath rm seq strip sync umount uname wget"
+       gzip ldconfig ldd ln ls make mkdir mknod mktemp modprobe mv printf
+       readlink realpath rm rmdir seq sleep strip sync umount uname wget"
 
 # err() - Print error and exit
 # $@:	Error message, optionally with printf format and arguments
@@ -280,6 +374,18 @@ fixup_apply() {
 	fi
 	echo "${__call}" >> "${wd}/init"
 	"${CHMOD}" 755 "${wd}/init"
+}
+
+# workers() - Run $THREADS instances of $1 in subshells, wait for completion
+# $1:	Function to call
+workers() {
+	__sync_dir="$(${MKTEMP} -d)"
+	for __t in $(${SEQ} 1 ${THREADS}); do
+		${MKDIR} "${__sync_dir}/${__t}"
+		( ${1} ${__t}; ${RMDIR} "${__sync_dir}/${__t}"; ) &
+	done
+
+	while ! ${RMDIR} "${__sync_dir}" 2>/dev/null; do ${SLEEP} 1; done
 }
 
 ################################################################################
@@ -572,7 +678,7 @@ __kmod_node() {
 kmod_node() {
 	__devname="${MODDIR}/lib/modules/${KERNEL}/modules.devname"
 	IFS=' :'
-	__kmod_node $("${GREP}" "^${1}" "${__devname}")
+	__kmod_node $("${GREP}" "^${1} " "${__devname}")
 	unset IFS
 }
 
@@ -589,11 +695,11 @@ kmod_add() {
 
 		# If a module is built-in, skip copy, but check if we need to
 		# add a device node for on-demand loading.
-		if [ "${__f}" != "builtin ${1}" ]; then
+		if [ -n "${__f%builtin *}" ]; then
 			__src="${__f##insmod }"
 			# Some modprobe implementations add one trailing space
-			__src="${__src%* }"
-			__dst="${wd}${__src##MODDIR}"
+			__src="${__src%% *}"
+			__dst="${wd}${__src##${MODDIR}}"
 			if ! "${DIFF}" "${__src}" "${__dst}" 2>/dev/null; then
 				"${MKDIR}" -p "$("${DIRNAME}" "${__dst}")"
 				"${CP}" -a "${__src}" "${__dst}"
@@ -613,6 +719,18 @@ kmod_post() {
 		   "${MODDIR}/lib/modules/${KERNEL}/modules.builtin" \
 		   "${wd}/lib/modules/${KERNEL}"
 	"${DEPMOD}" -b "${wd}" "${KERNEL}"
+}
+
+# kmod_strip_worker() - Strip debug information from modules, call via workers()
+# $1:	Worker thread number, used to select paths from $KMODS
+kmod_strip_worker() {
+	__i=1
+	for __kmod in ${KMODS}; do
+		[ ${__i} -eq ${1} ] && ${STRIP} --strip-debug ${__kmod}
+		__i=$((__i + 1))
+		[ ${__i} -eq ${THREADS} ] && __i=1
+	done
+	return 0
 }
 
 ################################################################################
@@ -738,7 +856,12 @@ build() {
 	done
 
 	for __c in ${COPIES}; do
-		"${CP}" --parent -a "${__c}" "${wd}"
+		set +f
+		case ${__c} in
+		*","*)	"${CP}" -a ${__c%,*} "${wd}${__c#*,}"	;;
+		*)	"${CP}" --parent -a "${__c}" "${wd}"	;;
+		esac
+		set -f
 	done
 
 	for __p in ${PKGS}; do
