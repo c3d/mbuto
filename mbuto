@@ -285,7 +285,7 @@ profile_kselftests() {
 # List of tools used here, assigned to uppercase variable names
 TOOLS="basename bc cat cd chmod cp cpio depmod diff dirname du file find grep
        gzip ldconfig ldd ln ls make mkdir mknod mktemp modprobe mv printf
-       readlink realpath rm rmdir seq sleep strip sync umount uname wget"
+       readlink realpath rm rmdir seq sleep strip sync umount uname wget which"
 
 # err() - Print error and exit
 # $@:	Error message, optionally with printf format and arguments
@@ -615,10 +615,9 @@ prog_add() {
 
 	IFS=','
 	for __a in ${1}; do
-		__bin="$(command -v "${__a}")" && break
+		__bin="$(${WHICH} "${__a}")" && break
 	done
 	unset IFS
-
 	[ -z "${__bin}" ] && err "Can't source ${1}"
 
 	# Binaries in /usr/libexec are meant to run on other hosts only, so they
