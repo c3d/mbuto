@@ -50,7 +50,7 @@ THREADS="$(nproc)"
 # Fix-up script to run before /init, can be omitted
 [ -z "${FIXUP}" ] && FIXUP='#!/bin/sh
 
-export PATH=/bin:/usr/bin:/sbin:/usr/sbin
+export PATH=/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin
 
 mount -t proc proc /proc
 mount -t sysfs sys /sys
@@ -130,7 +130,7 @@ profile_kata() {
 			mkdir /sys/fs/cgroup/${t}
 			mount -o rw,${t} -t cgroup cgroup /sys/fs/cgroup/${t}
 		done
-		'
+'
 
 	OUTPUT="Kata Containers [hypervisor.qemu] configuration:
 
@@ -151,9 +151,9 @@ profile_kata_debug() {
 		ash,dash,bash		/bin/sh"
 
 	FIXUP="${FIXUP}
-	       echo Starting interactive shell, exit to spawn kata-agent
-	       sh +m
-	       "
+		echo Starting interactive shell, exit to spawn kata-agent
+		sh +m
+"
 }
 
 # Profile for passt (https://passt.top) tests
@@ -170,8 +170,6 @@ profile_passt() {
 		 ash,dash,bash		/init
 		 ash,dash,bash		/bin/sh
 		 ash,dash,bash		/usr/bin/bash}"
-
-	NODES="${NODES} tty ttyS0"
 
 	DIRS="${DIRS} /tmp"
 
