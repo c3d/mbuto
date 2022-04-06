@@ -204,6 +204,9 @@ profile_kselftests() {
 	fi
 
 	KERNEL="$(cat include/config/kernel.release)"
+
+	${MAKE} -C tools/testing/selftests/ install
+
 	MODDIR="$(${REALPATH} .mbuto_mods)"
 	${RM} -rf "${MODDIR}"
 	${MKDIR} -p "${MODDIR}"
