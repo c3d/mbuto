@@ -548,9 +548,9 @@ libs_dlopen_copy() {
 	done
 }
 
-# libs_copy() - Recursively copy shared dependencies for programs and libraries
+# __libs_copy() - Recursively copy shared dependencies for programs, libraries
 # $1:	Host path to program or library
-libs_copy() {
+__libs_copy() {
 	info "Sourcing shared object dependencies for ${1}"
 
 	# ldd might succeed and print errors on stdout when paths are not found.
@@ -589,6 +589,15 @@ libs_copy() {
 		libs_copy_ld_so "${__ld_so}"
 		libs_path_add "${__ld_so##${wd}}"
 	fi
+}
+
+# libs_copy() - Call __libs_copy with tabs and newlines as IFS
+# $@:	Arguments to __libs_copy
+libs_copy() {
+	IFS='	
+'
+	__libs_copy "${@}"
+	unset IFS
 }
 
 ################################################################################
@@ -639,10 +648,7 @@ prog_add() {
 			  "${__target}" "${__l}"
 	done
 
-	IFS='	
-'
 	libs_copy "${__bin}"
-	unset IFS
 }
 
 ################################################################################
@@ -762,10 +768,7 @@ pkg_deb_add() {
 		__type="$("${FILE}" -bi "${wd}/${__f}")"
 		if [ "${__type%%;*}" = "application/x-sharedlib" ] ||
 		   [ "${__type%%;*}" = "application/x-executable" ]; then
-			IFS='
-'
 			libs_copy "${wd}/${__f}"
-			unset IFS
 		fi
 	done
 }
@@ -783,10 +786,7 @@ pkg_rpm_add() {
 		__type="$("${FILE}" -bi "${wd}/${__f}")"
 		if [ "${__type%%;*}" = "application/x-sharedlib" ] ||
 		   [ "${__type%%;*}" = "application/x-executable" ]; then
-			IFS='
-'
 			libs_copy "${wd}/${__f}"
-			unset IFS
 		fi
 	done
 }
