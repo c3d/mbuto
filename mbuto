@@ -902,8 +902,8 @@ add() {
 stats() {
 	__bin="$(dir_size bin usr/bin sbin usr/sbin usr/local/bin \
 		 usr/local/sbin)"
-	__lib="$(dir_size --exclude='lib/modules/' lib lib64 usr/lib usr/lib32 \
-		 usr/lib64 usr/local/lib)"
+	__lib="$(dir_size --exclude='lib/modules/*' lib lib64 usr/lib \
+		 usr/lib32 usr/lib64 usr/local/lib)"
 	__mod="$(dir_size lib/modules)"
 	__sum="$(dir_size .)"
 
