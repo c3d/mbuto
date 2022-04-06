@@ -394,7 +394,6 @@ workers() {
 # cpio_init() - Source existing CPIO archive, or create if needed
 # $1:	Path to CPIO archive, might exist, might be discarded if existing
 cpio_init() {
-	wd="$("${MKTEMP}" -d)"
 	if [ -f "${OUT}" ] && [ "${1}" != "discard" ]; then
 		info "Sourcing CPIO archive from ${OUT}"
 
@@ -566,7 +565,7 @@ libs_copy() {
 		[ "$("${BASENAME}" "${__path}")" = "libfakeroot-sysv.so" ] && \
 			continue
 
-		__destpath="${wd}/${__path}"
+		__destpath="${wd}${__path}"
 		[ -f "${__destpath}" ] && continue
 
 		__destdir="$("${DIRNAME}" "${__destpath}")"
@@ -918,7 +917,6 @@ stats() {
 # cmds() - Loop over non-option arguments if any, just build image otherwise
 # $@:	Command arguments
 cmds() {
-	wd=
 	{ [ ! -f "${OUT}" ] || [ -z "${1}" ]; } && build
 
 	for arg do
@@ -1049,6 +1047,9 @@ fi
 for __l in ${TOOLS}; do
 	cmd_check "${__l}"
 done
+
+# Create working directory
+wd="$("${MKTEMP}" -d)"
 
 # Apply profile requested via -p, if any, from matching profile_*() function
 if [ -n "${PROFILE}" ]; then
