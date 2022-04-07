@@ -205,7 +205,7 @@ profile_kselftests() {
 
 	KERNEL="$(cat include/config/kernel.release)"
 
-	${MAKE} -C tools/testing/selftests/ install
+	${MAKE} -C tools/testing/selftests/ install >/dev/null 2>&1
 
 	MODDIR="$(${REALPATH} .mbuto_mods)"
 	${RM} -rf "${MODDIR}"
@@ -692,30 +692,30 @@ kmod_node() {
 kmod_add() {
 	info "Adding kernel module ${1}"
 
-	IFS='
-'
-	for __f in $("${MODPROBE}" -S "${KERNEL}" -d "${MODDIR}" -q \
-		     --show-depends "${1}"); do
-		unset IFS
+	if [ -z "${MODDIR}" ]; then
+		__d_opt=""
+		__find_path="/lib/modules/${KERNEL}"
+	else
+		__d_opt="-d ${MODDIR}"
+		__find_path="${MODDIR}/lib/modules"
+	fi
 
-		# If a module is built-in, skip copy, but check if we need to
-		# add a device node for on-demand loading.
-		if [ -n "${__f%builtin *}" ]; then
-			__src="${__f##insmod }"
-			# Some modprobe implementations add one trailing space
-			__src="${__src%% *}"
-			__dst="${wd}${__src##${MODDIR}}"
+	for __t in $("${MODPROBE}" -S "${KERNEL}" -d "${__d_opt}" -q \
+		     --show-depends "$(${BASENAME} ${1})"); do
+		__t="$(${BASENAME} "${__t%*.ko}")"
+		if ${MODPROBE} -S "${KERNEL}" -d "${__d_opt}" -q \
+			--show-depends "$(${BASENAME} "${__t}")"; then
+			__src="$(${FIND} ${__find_path} -name "${__t}.ko")"
+			__dst="${wd}/${__src##${MODDIR}}"
 			if ! "${DIFF}" "${__src}" "${__dst}" 2>/dev/null; then
 				"${MKDIR}" -p "$("${DIRNAME}" "${__dst}")"
 				"${CP}" -a "${__src}" "${__dst}"
 			fi
+			kmod_node "${1}"
+		elif [ -z "${__f%builtin *}" ]; then
+			kmod_node "${1}"
 		fi
-
-		kmod_node "${1}"
-		IFS='
-'
 	done
-	unset IFS
 }
 
 # kmod_post() - Copy files for modprobe on target, run depmod
