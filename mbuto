@@ -700,10 +700,10 @@ kmod_add() {
 		__find_path="${MODDIR}/lib/modules"
 	fi
 
-	for __t in $("${MODPROBE}" -S "${KERNEL}" -d "${__d_opt}" -q \
+	for __t in $("${MODPROBE}" -S "${KERNEL}" "${__d_opt}" -q \
 		     --show-depends "$(${BASENAME} ${1})"); do
 		__t="$(${BASENAME} "${__t%*.ko}")"
-		if ${MODPROBE} -S "${KERNEL}" -d "${__d_opt}" -q \
+		if ${MODPROBE} -S "${KERNEL}" "${__d_opt}" -q \
 			--show-depends "$(${BASENAME} "${__t}")"; then
 			__src="$(${FIND} ${__find_path} -name "${__t}.ko")"
 			__dst="${wd}/${__src##${MODDIR}}"
