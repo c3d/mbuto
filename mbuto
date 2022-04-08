@@ -700,22 +700,27 @@ kmod_add() {
 		__find_path="${MODDIR}/lib/modules"
 	fi
 
-	for __t in $("${MODPROBE}" -S "${KERNEL}" -d "${__d_opt}" -q \
-		     --show-depends -- "$(${BASENAME} -- ${1})"); do
-		__t="$(${BASENAME} -- "${__t%*.ko}")"
-		if ${MODPROBE} -S "${KERNEL}" -d "${__d_opt}" -q \
-			--show-depends -- "$(${BASENAME} -- "${__t}")"; then
-			__src="$(${FIND} ${__find_path} -name "${__t}.ko")"
-			__dst="${wd}/${__src##${MODDIR}}"
-			if ! "${DIFF}" "${__src}" "${__dst}" 2>/dev/null; then
-				"${MKDIR}" -p "$("${DIRNAME}" "${__dst}")"
-				"${CP}" -a "${__src}" "${__dst}"
-			fi
+	__f=$("${MODPROBE}" -S "${KERNEL}" -d "${__d_opt}" -q \
+		--show-depends -- "$(${BASENAME} -- ${1})")
+	case ${__f} in
+		"builtin "*)
 			kmod_node "${1}"
-		elif [ -z "${__f%builtin *}" ]; then
-			kmod_node "${1}"
-		fi
-	done
+			;;
+		*)
+			for __t in ${__f}; do
+				__t="$(${BASENAME} -- "${__t%*.ko}")"
+				if ${MODPROBE} -S "${KERNEL}" -d "${__d_opt}" -q \
+					--show-depends -- "$(${BASENAME} -- "${__t}")"; then
+					__src="$(${FIND} ${__find_path} -name "${__t}.ko")"
+					__dst="${wd}/${__src##${MODDIR}}"
+					if ! "${DIFF}" "${__src}" "${__dst}" 2>/dev/null; then
+						"${MKDIR}" -p "$("${DIRNAME}" "${__dst}")"
+						"${CP}" -a "${__src}" "${__dst}"
+					fi
+					kmod_node "${1}"
+				fi
+			done
+	esac
 }
 
 # kmod_post() - Copy files for modprobe on target, run depmod
