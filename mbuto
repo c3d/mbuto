@@ -710,9 +710,9 @@ kmod_add() {
 			for __t in ${__f}; do
 				__t="$(${BASENAME} -- "${__t%*.ko}")"
 				if ${MODPROBE} -S "${KERNEL}" -d "${__d_opt}" -q \
-					--show-depends -- "$(${BASENAME} -- "${__t}")"; then
+					--show-depends -- "$(${BASENAME} -- "${__t}")" >/dev/null; then
 					__src="$(${FIND} ${__find_path} -name "${__t}.ko")"
-					__dst="${wd}/${__src##${MODDIR}}"
+					__dst="${wd}${__src##${MODDIR}}"
 					if ! "${DIFF}" "${__src}" "${__dst}" 2>/dev/null; then
 						"${MKDIR}" -p "$("${DIRNAME}" "${__dst}")"
 						"${CP}" -a "${__src}" "${__dst}"
