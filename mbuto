@@ -267,8 +267,10 @@ profile_kselftests() {
 
 	KERNEL="$(cat include/config/kernel.release)"
 
+        info "Buiding kernel self-tests"
 	${MAKE} -C tools/testing/selftests/ install >/dev/null 2>&1
 
+        info "Installing kernel modules"
 	MODDIR="$(${REALPATH} .mbuto_mods)"
 	${RM} -rf "${MODDIR}"
 	${MKDIR} -p "${MODDIR}"
@@ -285,6 +287,7 @@ profile_kselftests() {
 	KMODS="$(${FIND} "${MODDIR}" ${__skip_args}			\
 		-o -name '*.ko' -printf "%p ")"
 
+        info "Stripping kernel modules ($THREADS threads)"
 	workers kmod_strip_worker
 
 	KMODS="$(basename -a -s .ko ${KMODS})"
@@ -331,6 +334,7 @@ profile_kselftests() {
 		[ "${a}" != "s" ] && ./run_kselftest.sh
 '
 
+        info "Processing executables"
 	for __f in $(${FIND} tools/testing/selftests/kselftest_install/ \
 		     -executable); do
 		case $("${FILE}" -bi "${__f}") in
