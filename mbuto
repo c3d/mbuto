@@ -4,18 +4,80 @@
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
+## mbuto [OPTIONS] [ADD_ON]..."
+##
+## Options:
+## 	-c gzip|lz4|lzma|lzo|auto|none
+## 		compression method for CPIO file. Default: none
+## 	-d
+## 		don't strip binary objects
+## 	-f PATH
+## 		path for initramfs. Default: temporary file
+## 	-k VERSION
+## 		kernel version. Default: $(uname -r)
+## 	-m PATH
+## 		relative root for /lib/modules. Default: /
+## 	-p PROFILE
+## 		select profile for add-ons, one of:
+## 			base bash kata kata_debug passt
+## 		Default: base
+## 	-s SCRIPT|-
+## 		fix-up script to run before init, '-' for none
+## 	-v: verbose
+## 	-h: show this help
+##
+## mbuto (Minimal Builder Using Terse Options) builds Linux initramfs
+## images suitable for lightweight VM environments, without relying on
+## distribution-specific tools (dracut, debootstrap, mkinitramfs, etc.)
+## or containerised environments.
+##
+## mbuto builds initramfs image unless an existing one is passed.
+## Additional programs, kernel modules, device nodes, generic files
+## can be passed as a list of ADD_ON parameters.
+##
+## Programs are sourced from the host, together with required dynamic
+## libraries.  Kernel modules, links, and initial device nodes are
+## configured manually. A convenience support for distribution packages
+## is supplied, with the sole function of extracting packages, ignoring
+## dependencies, without an actual installation process.
+##
+## Distribution packages (deb and RPM currently supported) can be
+## added too, but they will simply be extracted, not installed.
+## Package dependencies are also not sourced.
+##
+## Environmental variables can be used to replace:
+## 	PROGS
+## 		base programs
+## 	LIBS_DLOPEN
+## 		additional libraries, not directly linked from
+## 		programs, typically loaded via dlopen(3) by matching
+## 		libraries, in the form
+## 			MATCHING_LIBRARY ADDITIONAL_LIBRARY
+## 	KMODS
+## 		base kernel modules
+## 	NODES
+## 		device nodes, copied from host if just name is given,
+## 		created if NAME,TYPE,MAJOR,MINOR
+## 	LINKS
+## 		link to programs by name, pairs of
+## 			PROGRAM PATH
+## 	DIRS
+## 		list of initial set of empty directories
+## 	COPIES
+## 		full copy of path, preserving attributes and parents
+##
+## Examples:
+## 	mbuto
+## 		Build a base image as a temporary file
+## 	mbuto grep
+## 		Build a new image including grep and needed libraries
+## 	mbuto -f kata.img zsh_5.6.2-3_amd64.deb
+## 		Install zsh package to pre-existing kata.img
+## 	mbuto -v -f kata.img -p kata_debug -c lz4
+## 		Use lz4 compression, run a shell before proceeding
+#
 # Copyright (c) 2020-2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
-#
-# This script builds Linux initramfs images suitable for lightweight VM
-# environments, without relying on distribution-specific tools (dracut,
-# debootstrap, mkinitramfs, etc.) or containerised environments.
-#
-# Programs are sourced from the host, together with required dynamic libraries.
-# Kernel modules, links, and initial device nodes are configured manually. A
-# convenience support for distribution packages is supplied, with the sole
-# function of extracting packages, ignoring dependencies, without an actual
-# installation process.
 #
 # shellcheck disable=SC2016,SC2046,SC2048,SC2059,SC2086,SC2154
 # 		     ^ FIXUP template, word splitting helpers, printf wrappers,
@@ -597,7 +659,7 @@ __libs_copy() {
 # libs_copy() - Call __libs_copy with tabs and newlines as IFS
 # $@:	Arguments to __libs_copy
 libs_copy() {
-	IFS='	
+	IFS='
 '
 	__libs_copy "${@}"
 	unset IFS
@@ -957,67 +1019,7 @@ cmds() {
 
 # usage() - Print usage and exit
 usage() {
-	echo "${0} [OPTIONS] [ADD_ON]..."
-	echo
-	echo "Options:"
-	echo "	-c gzip|lz4|lzma|lzo|auto|none"
-	echo "		compression method for CPIO file. Default: none"
-	echo "	-d"
-	echo "		don't strip binary objects"
-	echo "	-f PATH"
-	echo "		path for initramfs. Default: temporary file"
-	echo "	-k VERSION"
-	echo "		kernel version. Default: $(uname -r)"
-	echo "	-m PATH"
-	echo "		relative root for /lib/modules. Default: /"
-	echo "	-p PROFILE"
-	echo "		select profile for add-ons, one of:"
-	echo "			base bash kata kata_debug passt"
-	echo "		Default: base"
-	echo "	-s SCRIPT|-"
-	echo "		fix-up script to run before init, '-' for none"
-	echo "	-v: verbose"
-	echo "	-h: show this help"
-	echo
-	echo "Build initramfs image unless an existing one is passed."
-	echo "Additional programs, kernel modules, device nodes, generic files"
-	echo "can be passed as a list of ADD_ON parameters."
-	echo
-	echo "Distribution packages (deb and RPM currently supported) can be"
-	echo "added too, but they will simply be extracted, not installed."
-	echo "Package dependencies are also not sourced."
-	echo
-	echo "Environmental variables can be used to replace:"
-	echo "	PROGS"
-	echo "		base programs"
-	echo "	LIBS_DLOPEN"
-	echo "		additional libraries, not directly linked from"
-	echo "		programs, typically loaded via dlopen(3) by matching"
-	echo "		libraries, in the form"
-	echo "			MATCHING_LIBRARY ADDITIONAL_LIBRARY"
-	echo "	KMODS"
-	echo "		base kernel modules"
-	echo "	NODES"
-	echo "		device nodes, copied from host if just name is given, "
-	echo "		created if NAME,TYPE,MAJOR,MINOR"
-	echo "	LINKS"
-	echo "		link to programs by name, pairs of"
-	echo "			PROGRAM PATH"
-	echo "	DIRS"
-	echo "		list of initial set of empty directories"
-	echo "	COPIES"
-	echo "		full copy of path, preserving attributes and parents"
-	echo
-	echo "Examples:"
-	echo "	${0}"
-	echo "		Build a base image as a temporary file"
-	echo "	${0} grep"
-	echo "		Build a new image including grep and needed libraries"
-	echo "	${0} -f kata.img zsh_5.6.2-3_amd64.deb"
-	echo "		Install zsh package to pre-existing kata.img"
-	echo "	${0} -v -f kata.img -p kata_debug -c lz4"
-	echo "		Use lz4 compression, run a shell before proceeding"
-	exit 1
+    sed -E "/^###/d;/^##/s/^##\s?//g;t;d" $0
 }
 
 ################################################################################
@@ -1031,12 +1033,13 @@ while getopts c:df:k:m:p:s:vh __opt; do
 	c) COMPRESS="${OPTARG}"	;;
 	d) STRIP="n"		;;
 	f) OUT="${OPTARG}"	;;
+	h) usage; exit 0	;;
 	k) KERNEL="${OPTARG}"	;;
 	m) MODDIR="${OPTARG}"	;;
 	p) PROFILE="${OPTARG}"	;;
 	s) SCRIPT="${OPTARG}"	;;
 	v) VERBOSE="y"		;;
-	h|*) usage		;;
+        *) usage; exit 1        ;;
 	esac
 done
 shift $((OPTIND - 1))
